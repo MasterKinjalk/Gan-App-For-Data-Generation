@@ -1,0 +1,5 @@
+# Ignore checkpoints directory in CycleGan folder
+CycleGan/checkpoints/
+
+# Ignore weights directory in Fogg folder
+Fogg/weights/
