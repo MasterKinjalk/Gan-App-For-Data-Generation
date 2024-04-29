@@ -43,10 +43,11 @@ ensure_directory("FoggyImg")
 
 
 class ImageSelectionPage(tk.Frame):
+    """Image selection page with drag and drop and button functionality."""
+
     def __init__(self, master, on_image_selected):
-        super().__init__(
-            master, bg="#f0f0f0"
-        )  # Light grey background for a cleaner look
+        super().__init__(master, bg="#f0f0f0")  # Light grey background
+
         self.on_image_selected = on_image_selected
         self.master.title("Select Image")
         self.pack(fill="both", expand=True)
@@ -55,31 +56,32 @@ class ImageSelectionPage(tk.Frame):
         self.drop_target_register(DND_FILES)
         self.dnd_bind("<<Drop>>", self.on_drop)
 
-        # Instruction label
+        # Instruction label with click event
         self.label = tk.Label(
             self,
             text="Drag and drop an image here or click to select",
-            font=("Helvetica", 14),  # More modern font
-            bg="#f0f0f0",  # Background to match the frame
-            pady=1,  # Padding for better spacing
+            font=("Helvetica", 14),
+            bg="#f0f0f0",
+            pady=1,
         )
-        self.label.pack(relx=1, rely=1, anchor="n")
+        self.label.pack(anchor="n")
+        self.label.bind("<Button-1>", self.on_click)
 
-        # Center the plus button in the frame
+        # Plus button with styling
         self.plus_button = tk.Button(
             self,
             text="+",
-            font=("Roboto", 30),  # Large, clear font
+            font=("Roboto", 30),
             width=3,
             height=1,
             command=self.on_click,
-            relief=tk.RAISED,  # Flat style button
-            bg="#0078D7",  # Button color
-            fg="white",  # Text color
+            relief=tk.RAISED,
+            bg="#0078D7",
+            fg="white",
         )
-        self.plus_button.place(relx=0.5, rely=0.5, anchor="center")
+        self.plus_button.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
 
-        # Create a status bar
+        # Status bar
         self.status = ttk.Label(self, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
         self.status.pack(side=tk.BOTTOM, fill=tk.X)
 
