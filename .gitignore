@@ -3,3 +3,6 @@ CycleGan/checkpoints/
 
 # Ignore weights directory in Fogg folder
 Fogg/weights/
+
+
+venv/
