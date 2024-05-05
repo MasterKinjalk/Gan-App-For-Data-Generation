@@ -398,35 +398,29 @@ class ImageDisplayPage(tk.Frame):
 
 class DisplayGanifiedImages(tk.Frame):
     def __init__(self, master, on_go_back, recent_folders):
-        super().__init__(master, bg="#f5f5f5")
+        super().__init__(master, bg="lightgreen")
         self.master.title("View Recent Generations")
         self.recent_folders = recent_folders
         self.on_go_back = on_go_back
         self.pack(fill="both", expand=True)
 
-        self.canvas = tk.Canvas(
-            self, borderwidth=0, background="#ffffff", highlightthickness=0
-        )
+        self.canvas = tk.Canvas(self, bg="lightgreen")
         self.scrollbar = tk.Scrollbar(
             self, orient="vertical", command=self.canvas.yview
         )
-        self.scrollable_frame = ttk.Frame(self.canvas, style="My.TFrame")
-        self.ribbon_frame = tk.Frame(self, bg="#e1e1e1")
-        self.ribbon_frame.pack(side="bottom")
+        self.scrollable_frame = tk.Frame(self.canvas, bg="lightgreen")
+        self.ribbon_frame = tk.Frame(self, bg="#e1e1e1", height=12)
+        self.ribbon_frame.pack(side="bottom", fill="x", expand=False)
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.canvas_frame = self.canvas.create_window(
-            (0, 0), window=self.scrollable_frame, anchor="nw"
+            (0, 0),
+            window=self.scrollable_frame,
+            anchor="nw",
         )
         self.scrollbar.pack(side="right", fill="y")
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollable_frame.bind("<Configure>", self.on_frame_configure)
         self.canvas.bind("<Configure>", self.on_canvas_configure)
-        self.style = ttk.Style()
-        self.style.configure(
-            "Image.TFrame",
-            borderwidth=4,
-            relief="raised",
-        )
 
         self.back_button = tk.Button(
             self.ribbon_frame,
@@ -441,7 +435,13 @@ class DisplayGanifiedImages(tk.Frame):
         self.bind("<Visibility>", lambda event: self.reload_images())
 
     def reload_images(self):
+        self.clear_images()
         self.load_and_display_images()
+
+    def clear_images(self):
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        self.loaded_images.clear()
 
     def load_and_display_images(self):
         recent_images = self.find_recent_images()
@@ -456,8 +456,8 @@ class DisplayGanifiedImages(tk.Frame):
         current_time = time.time()
         for folder in self.recent_folders:
             if os.path.exists(folder):
-                # while not os.path.exists(folder):
-                #     time.sleep(0.1)  # Adjust the sleep interval as needed
+                while not os.path.exists(folder):
+                    time.sleep(0.1)  # Adjust the sleep interval as needed
                 for filename in os.listdir(folder):
                     filepath = os.path.join(folder, filename)
                     if os.path.isfile(filepath):
@@ -470,27 +470,35 @@ class DisplayGanifiedImages(tk.Frame):
 
     def add_image_to_display(self, photo, image_path):
         if len(self.loaded_images) % 2 == 0:
-            self.row_frame = ttk.Frame(self.scrollable_frame)
+            self.row_frame = tk.Frame(self.scrollable_frame, bg="lightgreen")
             self.row_frame.pack(fill="x", expand=True)
         self.loaded_images.append((photo, image_path))
         self.display_image(photo, self.row_frame, os.path.basename(image_path))
 
     def display_image(self, photo, parent_frame, filename):
-        image_frame = ttk.Frame(
-            parent_frame, style="Image.TFrame"
-        )  # Frame that will contain the image
-        image_widget = ttk.Label(image_frame, image=photo)
+        image_frame = tk.Frame(
+            parent_frame,
+            bg="#2EF3FF",
+        )
+        image_widget = tk.Label(image_frame, image=photo, bg="yellow")
         image_widget.image = photo  # Keep a reference to avoid garbage collection
         image_widget.pack(padx=10, pady=10)
 
         fname = filename.split("_")
         if len(fname) > 2:
-            transformation_name = fname[2][:-3]
+            transformation_name = fname[2][:-4].upper()
         else:
-            transformation_name = fname[1][:-3]
-        label = ttk.Label(parent_frame, text=transformation_name, style="My.TLabel")
-        image_frame.pack(side="left", expand=True, padx=20, pady=10)
-        label.pack(side="bottom", padx=20, pady=5, anchor="n")
+            transformation_name = fname[1][:-4].upper()
+        label = tk.Label(
+            image_frame,
+            text=transformation_name,
+            fg="black",
+            bg="#2EF3FF",
+            font=("Helvetica", 12, "bold"),
+        )
+        label.pack()
+
+        image_frame.pack(side="left", expand=True, padx=20, pady=10, anchor="n")
 
     def on_frame_configure(self, event):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
