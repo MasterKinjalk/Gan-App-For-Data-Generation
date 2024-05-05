@@ -10,6 +10,7 @@ from tkinter import ttk
 from pathlib import Path
 import time
 import threading
+import tkinter.messagebox as messagebox
 
 
 @contextmanager
@@ -47,7 +48,6 @@ class ImageSelectionPage(tk.Frame):
 
     def __init__(self, master, on_image_selected):
         super().__init__(master, bg="#f0f0f0")  # Light grey background
-
         self.on_image_selected = on_image_selected
         self.master.title("Select Image")
         self.pack(fill="both", expand=True)
@@ -196,7 +196,7 @@ class ImageDisplayPage(tk.Frame):
             text="Foggy",
             bg="#888888",
             fg="white",
-            command=self.apply_fog,
+            command=lambda: self.threaded_apply_model("fogg"),
         )
         self.foggy_button.pack(side="left", padx=5)
 
@@ -236,18 +236,77 @@ class ImageDisplayPage(tk.Frame):
         )
         self.sunrise2day_button.pack(side="left", padx=5)
 
+        self.segmentation_button = tk.Button(
+            self.ribbon_frame,
+            text="Image Segmentation",
+            bg="#03F4FD",
+            fg="black",
+            command=lambda: self.threaded_apply_model("im2seg"),
+        )
+        self.segmentation_button.pack(side="left", padx=5)
+
+        self.view_recent_button = tk.Button(
+            self.ribbon_frame,
+            text="View Recent Generations",
+            bg="#FFD700",
+            fg="black",
+            command=self.view_recent_generations,  # Adjust this to reference the correct method path
+        )
+        self.view_recent_button.pack(side="left", padx=5)
+
         self.original_image_label = tk.Label(self.left_panel, bg="#f5f5f5")
         self.original_image_label.pack(expand=True)
 
         self.duplicate_image_label = tk.Label(self.right_panel, bg="#f5f5f5")
         self.duplicate_image_label.pack(expand=True)
-
+        self.model_threads = {}  # Dictionary to store threads
+        self.model_type = None
         # Storing current image path for operations
         self.current_image_path = ""
         self.start_time = time.time()
-
+        # Semaphore to limit the number of active threads
+        self.thread_semaphore = threading.Semaphore(4)
         # Start the timer
         self.update_timer()
+        print(f" print wk from tkinter app {os.getcwd()}")
+
+    def view_recent_generations(self):
+        # Hide the current page and all others might be visible
+        self.master.switch_to_page(None)
+
+        # Check if the 'recent_generations' page already exists in the pages dictionary
+        if (
+            "recent_generations" not in self.master.pages
+            or self.master.pages["recent_generations"] is None
+        ):
+            # If the page doesn't exist, create it
+            self.master.pages["recent_generations"] = DisplayGanifiedImages(
+                self.master, self.master.go_back, ["./FoggyImg", "./CycleGanImg"]
+            )
+
+        # Switch to the 'recent_generations' page
+        self.master.switch_to_page("recent_generations")
+
+    # Message bOx
+
+    def show_task_complete_popup(self, model_name):
+        model_mapping = {
+            "summer2winter": "Summer to Winter",
+            "winter2summer": "Winter to Summer",
+            "normal2snow": "Normal to Snow",
+            "snow2normal": "Snow to Normal",
+            "day2night": "Day to Night",
+            "day2sunrise": "Day to Sunrise",
+            "night2day": "Night to Day",
+            "sunrise2day": "Sunrise to Day",
+            "im2seg": "Image Segmentation",
+        }
+
+        message = (
+            f"Task of applying {model_mapping[model_name]} has completed successfully"
+        )
+
+        messagebox.showinfo("Task Complete", message)
 
     def display_image(self, image_path):
         self.current_image_path = image_path  # Store the current path
@@ -261,24 +320,32 @@ class ImageDisplayPage(tk.Frame):
         self.duplicate_image_label.config(image=photo)
         self.duplicate_image_label.image = photo  # Keep a reference
 
+    def setup(self, image_path):
+        # Add your existing setup code or image display logic here
+        self.display_image(image_path)
+
     def apply_fog(self):
         if self.current_image_path:
             fogged_image_path = add_fog(self.current_image_path)
             image = Image.open(fogged_image_path)
             image = image.resize((600, 600), Image.LANCZOS)
             photo = ImageTk.PhotoImage(image)
-
+            # Complete the progress when done
+            self.update_progress(100 - self.progress["value"])
             self.duplicate_image_label.config(image=photo)
             self.duplicate_image_label.image = photo
 
     def apply_model(self, model_type):
         if self.current_image_path:
             cyclegan(model_type, self.current_image_path)
-            time.sleep(2)  # Simulating a long-running task
-            self.update_progress(5)
-            image = Image.open(
-                f"./CycleGanImg/{Path(self.current_image_path).stem}_result_{model_type}.jpg"
+            image_filename = (
+                f"{Path(self.current_image_path).stem}_result_{model_type}.jpg"
             )
+            output_image_path = f"./CycleGanImg/{image_filename}"
+            # Wait until the file is created
+            while not os.path.exists(output_image_path):
+                time.sleep(0.1)  # Adjust the sleep interval as needed
+            image = Image.open(output_image_path)
             image = image.resize((600, 600), Image.LANCZOS)
             photo = ImageTk.PhotoImage(image)
             # Complete the progress when done
@@ -286,16 +353,31 @@ class ImageDisplayPage(tk.Frame):
             # Update the display with the new image
             self.duplicate_image_label.config(image=photo)
             self.duplicate_image_label.image = photo
+            self.show_task_complete_popup(model_type)
+            # Remove the thread from the dictionary once completed
+            del self.model_threads[model_type]
+            # Release the semaphore to allow another thread to start
+            self.thread_semaphore.release()
 
     def threaded_apply_model(self, model_type):
         # Reset progress bar
         self.progress["value"] = 0
         self.update_progress(5)  # Initial quick update for better UX
-
-        # Start the long-running task in a new thread
-        threading.Thread(
-            target=self.apply_model, args=(model_type,), daemon=True
-        ).start()
+        if model_type == "fogg":
+            threading.Thread(target=self.apply_fog, daemon=True).start()
+        else:
+            # Acquire the semaphore before starting the thread
+            if self.thread_semaphore.acquire(blocking=False):
+                # Start the thread for applying the model
+                thread = threading.Thread(
+                    target=self.apply_model, args=(model_type,), daemon=True
+                )
+                self.model_threads[model_type] = (
+                    thread  # Store the thread in the dictionary
+                )
+                thread.start()
+            else:
+                messagebox.showinfo("Info", "Maximum number of threads reached.")
 
     def update_progress(self, increment):
         # Incrementally update the progress bar
@@ -314,28 +396,162 @@ class ImageDisplayPage(tk.Frame):
         self.after(1000, self.update_timer)  # Schedule next update after 1 second
 
 
+class DisplayGanifiedImages(tk.Frame):
+    def __init__(self, master, on_go_back, recent_folders):
+        super().__init__(master, bg="#f5f5f5")
+        self.master.title("View Recent Generations")
+        self.recent_folders = recent_folders
+        self.on_go_back = on_go_back
+        self.pack(fill="both", expand=True)
+
+        self.canvas = tk.Canvas(
+            self, borderwidth=0, background="#ffffff", highlightthickness=0
+        )
+        self.scrollbar = tk.Scrollbar(
+            self, orient="vertical", command=self.canvas.yview
+        )
+        self.scrollable_frame = ttk.Frame(self.canvas, style="My.TFrame")
+        self.ribbon_frame = tk.Frame(self, bg="#e1e1e1")
+        self.ribbon_frame.pack(side="bottom")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas_frame = self.canvas.create_window(
+            (0, 0), window=self.scrollable_frame, anchor="nw"
+        )
+        self.scrollbar.pack(side="right", fill="y")
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollable_frame.bind("<Configure>", self.on_frame_configure)
+        self.canvas.bind("<Configure>", self.on_canvas_configure)
+        self.style = ttk.Style()
+        self.style.configure(
+            "Image.TFrame",
+            borderwidth=4,
+            relief="raised",
+        )
+
+        self.back_button = tk.Button(
+            self.ribbon_frame,
+            text="↩",
+            bg="#0078D7",
+            fg="white",
+            command=on_go_back,
+        )
+        self.back_button.pack(side="bottom", fill="x", padx=10, pady=10)
+
+        self.loaded_images = []
+        self.bind("<Visibility>", lambda event: self.reload_images())
+
+    def reload_images(self):
+        self.load_and_display_images()
+
+    def load_and_display_images(self):
+        recent_images = self.find_recent_images()
+        self.loaded_images.clear()
+        for image_path in recent_images:
+            image = Image.open(image_path)
+            photo = ImageTk.PhotoImage(image.resize((400, 400), Image.LANCZOS))
+            self.add_image_to_display(photo, image_path)
+
+    def find_recent_images(self):
+        recent_images = []
+        current_time = time.time()
+        for folder in self.recent_folders:
+            if os.path.exists(folder):
+                # while not os.path.exists(folder):
+                #     time.sleep(0.1)  # Adjust the sleep interval as needed
+                for filename in os.listdir(folder):
+                    filepath = os.path.join(folder, filename)
+                    if os.path.isfile(filepath):
+                        modified_time = os.path.getmtime(filepath)
+                        if (
+                            current_time - modified_time <= 600
+                        ):  # Considered as recent if modified within last 10 minutes
+                            recent_images.append(filepath)
+        return recent_images
+
+    def add_image_to_display(self, photo, image_path):
+        if len(self.loaded_images) % 2 == 0:
+            self.row_frame = ttk.Frame(self.scrollable_frame)
+            self.row_frame.pack(fill="x", expand=True)
+        self.loaded_images.append((photo, image_path))
+        self.display_image(photo, self.row_frame, os.path.basename(image_path))
+
+    def display_image(self, photo, parent_frame, filename):
+        image_frame = ttk.Frame(
+            parent_frame, style="Image.TFrame"
+        )  # Frame that will contain the image
+        image_widget = ttk.Label(image_frame, image=photo)
+        image_widget.image = photo  # Keep a reference to avoid garbage collection
+        image_widget.pack(padx=10, pady=10)
+
+        fname = filename.split("_")
+        if len(fname) > 2:
+            transformation_name = fname[2][:-3]
+        else:
+            transformation_name = fname[1][:-3]
+        label = ttk.Label(parent_frame, text=transformation_name, style="My.TLabel")
+        image_frame.pack(side="left", expand=True, padx=20, pady=10)
+        label.pack(side="bottom", padx=20, pady=5, anchor="n")
+
+    def on_frame_configure(self, event):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def on_canvas_configure(self, event):
+        self.canvas.itemconfig(self.canvas_frame, width=event.width)
+
+
 class MainApplication(TkinterDnD.Tk):
     def __init__(self):
         super().__init__()
         self.geometry("2100x900")
+        self.resizable(False, False)
+        self.page_stack = []
+        self.init_methods()
+        self.init_pages()
 
-        self.selection_page = ImageSelectionPage(self, self.switch_to_display_page)
-        self.display_page = None
+    def init_methods(self):
+        self.switch_to_display_page = self._switch_to_display_page
+        self.go_back = self._go_back
 
-    def switch_to_display_page(self, image_path):
-        if self.display_page:
-            self.display_page.destroy()
+    def init_pages(self):
+        self.pages = {
+            "selection": ImageSelectionPage(self, self.switch_to_display_page),
+            "display": None,  # Will be created dynamically
+            "recent_generations": None,  # Will be created dynamically
+        }
+        self.current_page = None
+        self.switch_to_page("selection")
 
-        self.display_page = ImageDisplayPage(self, self.go_back)
-        self.display_page.display_image(image_path)
-        self.selection_page.pack_forget()
-        self.display_page.pack()
+    def _switch_to_display_page(self, image_path):
+        self.switch_to_page("display", image_path)
 
-    def go_back(self):
-        if self.display_page:
-            self.display_page.pack_forget()
+    def _go_back(self):
+        if self.page_stack:
+            self.current_page.pack_forget()
+            self.current_page = self.page_stack.pop()
+            self.current_page.pack(expand=True, fill="both")
 
-        self.selection_page.pack()
+    def switch_to_page(self, page_name, *args):
+        if self.current_page:
+            self.current_page.pack_forget()
+            self.page_stack.append(self.current_page)
+
+        # If None is passed, do not attempt to switch to a new page
+        if page_name is None:
+            self.current_page = None
+            return
+
+        if page_name not in self.pages or self.pages[page_name] is None:
+            if page_name == "display":
+                self.pages[page_name] = ImageDisplayPage(self, self.go_back)
+            elif page_name == "recent_generations":
+                self.pages[page_name] = DisplayGanifiedImages(
+                    self, self.go_back, ["FoggyImg", "CycleGanImg"]
+                )
+
+        self.current_page = self.pages[page_name]
+        if args:
+            self.current_page.setup(*args)
+        self.current_page.pack(expand=True, fill="both")
 
 
 if __name__ == "__main__":

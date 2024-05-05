@@ -13,6 +13,7 @@ def cyclegan(model, img_path):
         "day2sunrise": "day2sunrise",
         "night2day": "night2day",
         "sunrise2day": "sunrise2day",
+        "im2seg": "im2seg",
     }
     if model not in model_mapping:
         raise ValueError("Model not recognized or supported.")
@@ -23,21 +24,41 @@ def cyclegan(model, img_path):
     model_name = model_mapping[model]
     python_executable = "F:/CS 543/Project/venv/Scripts/python.exe"  # Path to Python executable in your virtual environment
     test_script = "F:/CS 543/Project/CycleGan/test.py"
-    command = [
-        python_executable,  # Use Python executable from virtual environment
-        test_script,
-        "--dataroot",
-        img_path,
-        "--name",
-        model_name,
-        "--model",
-        "test",
-        "--no_dropout",
-        "--num_test",
-        "1",
-        "--preprocess",
-        "resize_and_crop",
-    ]
+    if model_name == "im2seg":
+        command = [
+            python_executable,  # Use Python executable from virtual environment
+            test_script,
+            "--dataroot",
+            img_path,
+            "--name",
+            model_name,
+            "--model",
+            "test",
+            "--netG",
+            "unet_256",
+            "--direction",
+            "BtoA",
+            "--dataset_mode",
+            "single",
+            "--norm",
+            "batch",
+        ]
+    else:
+        command = [
+            python_executable,  # Use Python executable from virtual environment
+            test_script,
+            "--dataroot",
+            img_path,
+            "--name",
+            model_name,
+            "--model",
+            "test",
+            "--no_dropout",
+            "--num_test",
+            "1",
+            "--preprocess",
+            "resize_and_crop",
+        ]
     # Change to the CycleGan directory
     try:
         # Execute the command
@@ -60,6 +81,7 @@ def cyclegan(model, img_path):
 
 # if __name__ == "__main__":
 #     cyclegan(
-#         "summer2winter",
+#         "im2seg",
 #         "F:/CS 543/Project/bgscene.png",
 #     )
+#     print("&&&&&&&&&&&&&&&&&&&&")

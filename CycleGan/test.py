@@ -33,10 +33,8 @@ if __name__ == "__main__":
     opt.no_flip = True  # no flip
     opt.display_id = -1  # no visdom display
     opt.isTrain = False  # set model to inference mode
-    print("***********************")
     # User specifies the image path directly or through command line
     image_path = opt.dataroot
-    print("***********************")
 
     # Create a model
     model = create_model(opt)
@@ -48,17 +46,16 @@ if __name__ == "__main__":
 
     # Load and process the single image
     data = load_single_image(image_path, opt)
-    print("***********************")
+
     model.set_input(data)  # unpack data from data loader
-    print("***********************")
+
     model.test()  # run inference
-    print("***********************")
+
     visuals = model.get_current_visuals()  # get image results
-    print("***********************")
 
     # Save the result image
     to_pil = ToPILImage()
-    print("***********************")
+
     for label, image_tensor in visuals.items():
         if label == "fake":
             # Convert the tensor to an image array
