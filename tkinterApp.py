@@ -564,5 +564,6 @@ class MainApplication(TkinterDnD.Tk):
 
 if __name__ == "__main__":
     app = MainApplication()
+    app.title("Widescale Weather Witchcraft")
     app.iconbitmap("withcraft.ico")
     app.mainloop()
